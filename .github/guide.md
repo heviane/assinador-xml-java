@@ -33,8 +33,8 @@ O projeto possui um arquivo de teste (`src/test/java/com/assinador/AssinadorXmlT
 ### Preparação
 
 1. Tenha em mãos um certificado digital **A1** (arquivo `.pfx` ou `.p12`) e a senha dele.
-2. Crie um arquivo chamado `dps-original.xml` na raiz do projeto com o conteúdo XML que deseja assinar.
-    * *Nota:* O teste busca por padrão uma tag chamada `<infNFSe>` dentro de `<NFSe>`. Certifique-se que seu XML tenha essa estrutura.
+2. Crie arquivos de teste na raiz do projeto com o conteúdo XML que deseja assinar.
+3. Ajuste os nomes dos arquivos de teste na classe de teste.
 
 ### Executando (Via VS Code)
 
@@ -56,7 +56,7 @@ O teste exige o caminho e a senha do certificado. A forma mais fácil de passar 
 ```
 
 4. Salve e pressione **F5**.
-5. Se der certo, um arquivo `dps-assinado.xml` será criado na raiz do projeto.
+5. Se der certo, os arquivos `XXX-assinado.xml` serão criados na raiz do projeto.
 
 ## 4. Como Usar em Outro Projeto
 
@@ -72,4 +72,4 @@ Para usar esta biblioteca em sua aplicação Java:
 </dependency>
 ```
 
-2. Instancie a classe `AssinadorXml` e chame o método `assinarXml` passando o conteúdo do XML (String), caminho do certificado, senha e os nomes das tags (nó a assinar e nó pai).
+2. Instancie a classe `AssinadorXml` e chame o método `assinarXml` passando o conteúdo do XML (String), caminho do certificado, senha, nome da tag, nome do atributo e namespace para assinatura.

@@ -2,7 +2,6 @@ package com.assinador;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
-
 import java.nio.charset.StandardCharsets;
 
 public class AssinadorXmlTeste {
@@ -17,43 +16,55 @@ public class AssinadorXmlTeste {
             if (senhaCertificado == null) {
                 throw new IllegalArgumentException("A senha do certificado é obrigatória! Use o argumento JVM: -Dcert.password=\"SUA_SENHA\"");
             }
-            String caminhoXmlOriginal = "dps-original.xml";
-            String noParaAssinar      = "infNFSe";
-            String noPaiDaAssinatura  = "NFSe";
-            // -----------------------------
 
-            System.out.println("=== Iniciando Teste de Integração (Modo Lib Dinâmico) ===");
-
-            // 1. Simula o GeneXus lendo o arquivo para uma String
-            if (!Files.exists(Paths.get(caminhoXmlOriginal))) {
-                System.err.println("ERRO: Arquivo " + caminhoXmlOriginal + " não encontrado na raiz do projeto!");
-                return;
-            }
-            
-            byte[] encoded = Files.readAllBytes(Paths.get(caminhoXmlOriginal));
-            String xmlOriginalStr = new String(encoded, StandardCharsets.UTF_8);
-
-            // 2. Instancia a Lib atualizada
             AssinadorXml assinador = new AssinadorXml();
+            System.out.println("=== Iniciando Testes de Integração ===");
 
-            // 3. Executa a assinatura via método genérico
-            System.out.println("Assinando o nó <" + noParaAssinar + "> dentro de <" + noPaiDaAssinatura + ">...");
-            
-            // IMPORTANTE: Use o nome do novo método que criamos na Lib
-            String xmlAssinadoStr = assinador.assinarXml(
-                xmlOriginalStr, 
-                caminhoCertificado, 
-                senhaCertificado,
-                noParaAssinar,
-                noPaiDaAssinatura
-            );
+            // -------------------------------------------------------------------
+            // CENÁRIO 1: EMISSÃO (Id="Id", Namespace=".../nfse")
+            // -------------------------------------------------------------------
+            String arqEmissao = "dps-original.xml";
+            if (Files.exists(Paths.get(arqEmissao))) {
+                System.out.println("\n>>> Testando Emissão...");
+                String xmlOriginal = new String(Files.readAllBytes(Paths.get(arqEmissao)), StandardCharsets.UTF_8);
+                
+                String xmlAssinado = assinador.assinarXml(
+                    xmlOriginal, 
+                    caminhoCertificado, 
+                    senhaCertificado,
+                    "infNFSe",                     // Nó alvo
+                    "Id",                             // Atributo ID (Maiúsculo)
+                    "http://www.sped.fazenda.gov.br/nfse"  // Namespace
+                );
 
-            // 4. Salva o resultado em disco
-            Files.write(Paths.get("dps-assinado.xml"), xmlAssinadoStr.getBytes(StandardCharsets.UTF_8));
+                Files.write(Paths.get("dps-assinado.xml"), xmlAssinado.getBytes(StandardCharsets.UTF_8));
+                System.out.println("✅ Emissão gerada: dps-assinado.xml");
+            } else {
+                System.out.println("⚠️ Arquivo de emissão (" + arqEmissao + ") não encontrado.");
+            }
 
-            System.out.println("✅ Sucesso!");
-            System.out.println("Arquivo gerado: dps-assinado.xml");
-            System.out.println("Dica: Valide o arquivo no site do ITI (Assinatura Digital).");
+            // -------------------------------------------------------------------
+            // CENÁRIO 2: CANCELAMENTO (Id="id", Namespace=".../nfsevia")
+            // -------------------------------------------------------------------
+            String arqCancelamento = "cancelamento-original.xml";
+            if (Files.exists(Paths.get(arqCancelamento))) {
+                System.out.println("\n>>> Testando Cancelamento...");
+                String xmlOriginal = new String(Files.readAllBytes(Paths.get(arqCancelamento)), StandardCharsets.UTF_8);
+                
+                String xmlAssinado = assinador.assinarXml(
+                    xmlOriginal, 
+                    caminhoCertificado, 
+                    senhaCertificado,
+                    "infEventoVia",                  // Nó alvo (Ajustar conforme XML)
+                    "id",                               // Atributo ID (Minúsculo)
+                    "http://www.sped.fazenda.gov.br/nfsevia" // Namespace
+                );
+
+                Files.write(Paths.get("cancelamento-assinado.xml"), xmlAssinado.getBytes(StandardCharsets.UTF_8));
+                System.out.println("✅ Cancelamento gerado: cancelamento-assinado.xml");
+            } else {
+                System.out.println("⚠️ Arquivo de cancelamento (" + arqCancelamento + ") não encontrado. Crie este arquivo para testar.");
+            }
 
         } catch (Exception e) {
             System.err.println("❌ Erro durante o teste:");

@@ -22,25 +22,10 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
-/**
- * Classe responsável pela assinatura digital de documentos XML utilizando o padrão XML-DSig.
- * Suporta certificados A1 (PKCS#12) e algoritmos RSA-SHA1.
- */
 public class AssinadorXml {
 
-    /**
-     * Realiza a assinatura digital de um XML (Enveloped Signature).
-     *
-     * @param xmlConteudo Conteúdo do XML a ser assinado.
-     * @param caminhoCertificado Caminho físico do arquivo do certificado (.pfx ou .p12).
-     * @param senhaCertificado Senha do certificado.
-     * @param nomeNoParaAssinar Nome da tag que será assinada (Reference URI).
-     * @param nomeNoPaiDaAssinatura Nome da tag onde o nó Signature será inserido.
-     * @return String contendo o XML assinado.
-     * @throws Exception Caso ocorra erro de IO, certificado inválido ou falha na assinatura.
-     */
     public String assinarXml(String xmlConteudo, String caminhoCertificado, String senhaCertificado, 
-                             String nomeNoParaAssinar, String nomeNoPaiDaAssinatura) throws Exception {
+                             String nomeNoParaAssinar, String nomeAtributoId, String namespace) throws Exception {
         
         java.io.File file = new java.io.File(caminhoCertificado);
 		if (!file.exists()) {
@@ -60,7 +45,7 @@ public class AssinadorXml {
         dbf.setNamespaceAware(true);
         Document doc = dbf.newDocumentBuilder().parse(new ByteArrayInputStream(xmlConteudo.getBytes("UTF-8")));
 
-        Document docAssinado = signNode(doc, keyEntry, nomeNoParaAssinar, nomeNoPaiDaAssinatura);
+        Document docAssinado = signNode(doc, keyEntry, nomeNoParaAssinar, nomeAtributoId, namespace);
 
         Transformer transformer = TransformerFactory.newInstance().newTransformer();
         transformer.setOutputProperty(javax.xml.transform.OutputKeys.INDENT, "no");
@@ -78,7 +63,7 @@ public class AssinadorXml {
                        .replace(" standalone=\"no\"", "");
     }
 
-    private Document signNode(Document doc, KeyStore.PrivateKeyEntry keyEntry, String targetNode, String parentNodeName) throws Exception {
+    private Document signNode(Document doc, KeyStore.PrivateKeyEntry keyEntry, String targetNode, String nomeAtributoId, String namespace) throws Exception {
         
         // 1. Localiza o elemento que será assinado (ex: infNFSe)
         NodeList elements = doc.getElementsByTagName(targetNode);
@@ -87,23 +72,25 @@ public class AssinadorXml {
         
         Element elementToSign = (Element) elements.item(0); 
 
-        String id = elementToSign.getAttribute("Id");
+        String id = elementToSign.getAttribute(nomeAtributoId);
         if (id == null || id.isEmpty()) {
-            throw new Exception("O atributo 'Id' na tag <" + targetNode + "> está vazio ou ausente.");
+            throw new Exception("O atributo '" + nomeAtributoId + "' na tag <" + targetNode + "> está vazio ou ausente.");
         }
         
-        elementToSign.setIdAttribute("Id", true); 
-        elementToSign.setIdAttributeNS(null, "Id", true); // Garante reconhecimento em diferentes parsers
+        elementToSign.setIdAttribute(nomeAtributoId, true); 
+        elementToSign.setIdAttributeNS(null, nomeAtributoId, true); // Garante reconhecimento em diferentes parsers
 
         // Opcional: Alguns servidores SIL antigos só validam se o ID for setado via Attr
-        Attr idAttr = elementToSign.getAttributeNode("Id");
+        Attr idAttr = elementToSign.getAttributeNode(nomeAtributoId);
         elementToSign.setIdAttributeNode(idAttr, true);
 
         // 3. Contexto de Assinatura (DENTRO do elemento para ser Enveloped)
         DOMSignContext dsc = new DOMSignContext(keyEntry.getPrivateKey(), elementToSign);
         dsc.putNamespacePrefix(XMLSignature.XMLNS, "");
-        dsc.setIdAttributeNS(elementToSign, null, "Id");
-        dsc.putNamespacePrefix("http://www.sped.fazenda.gov.br/nfse", "");// Ajuda o validador do servidor a encontrar o nó dentro do namespace correto
+        dsc.setIdAttributeNS(elementToSign, null, nomeAtributoId);
+        if (namespace != null && !namespace.isEmpty()) {
+            dsc.putNamespacePrefix(namespace, "");// Ajuda o validador do servidor a encontrar o nó dentro do namespace correto
+        }
 
         XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
 
@@ -114,7 +101,7 @@ public class AssinadorXml {
 
         // 5. Referência 
         Reference ref = fac.newReference(
-            "#" + elementToSign.getAttribute("Id"), 
+            "#" + elementToSign.getAttribute(nomeAtributoId), 
             fac.newDigestMethod(DigestMethod.SHA1, null), // Constante: http://www.w3.org/2000/09/xmldsig#sha1
             transformList, null, null
         );

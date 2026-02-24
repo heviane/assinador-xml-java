@@ -35,4 +35,9 @@ replay_pid*
 .project
 
 # Arquivos gerados durante os testes
+dps-original.xml
 dps-assinado.xml
+cancelamento-original.xml
+cancelamento-assinado.xml
+
+local/

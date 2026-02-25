@@ -1,22 +1,37 @@
 package com.assinador;
 
-import javax.xml.crypto.dsig.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.cert.X509Certificate;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+import javax.xml.crypto.dsig.CanonicalizationMethod;
+import javax.xml.crypto.dsig.DigestMethod;
+import javax.xml.crypto.dsig.Reference;
+import javax.xml.crypto.dsig.SignatureMethod;
+import javax.xml.crypto.dsig.SignedInfo;
+import javax.xml.crypto.dsig.Transform;
+import javax.xml.crypto.dsig.XMLSignature;
+import javax.xml.crypto.dsig.XMLSignatureFactory;
 import javax.xml.crypto.dsig.dom.DOMSignContext;
-import javax.xml.crypto.dsig.keyinfo.*;
+import javax.xml.crypto.dsig.keyinfo.KeyInfo;
+import javax.xml.crypto.dsig.keyinfo.KeyInfoFactory;
+import javax.xml.crypto.dsig.keyinfo.X509Data;
 import javax.xml.crypto.dsig.spec.C14NMethodParameterSpec;
 import javax.xml.crypto.dsig.spec.TransformParameterSpec;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import java.io.ByteArrayInputStream;
-import java.io.FileInputStream;
-import java.io.StringWriter;
-import java.security.KeyStore;
-import java.security.cert.X509Certificate;
-import java.util.Collections;
-import java.util.List;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -25,11 +40,11 @@ import org.w3c.dom.NodeList;
 public class AssinadorXml {
 
     public String assinarXml(String xmlConteudo, String caminhoCertificado, String senhaCertificado, 
-                             String nomeNoParaAssinar, String nomeAtributoId, String namespace) throws Exception {
+                             String nomeNoParaAssinar, String nomeAtributoId, String namespace) throws Exception { // A assinatura pode lançar diversas exceções
         
-        java.io.File file = new java.io.File(caminhoCertificado);
+        File file = new File(caminhoCertificado);
 		if (!file.exists()) {
-			throw new Exception("Certificado nao encontrado no caminho: " + caminhoCertificado);
+			throw new FileNotFoundException("Certificado nao encontrado no caminho: " + caminhoCertificado);
 		}
 
         KeyStore ks = KeyStore.getInstance("PKCS12");
@@ -37,30 +52,46 @@ public class AssinadorXml {
             ks.load(fis, senhaCertificado.toCharArray());
         }
         
-        String alias = ks.aliases().nextElement();
+        // String alias = ks.aliases().nextElement();
+        String alias = null;
+        Enumeration<String> aliases = ks.aliases();
+        while (aliases.hasMoreElements()) {
+            String currentAlias = aliases.nextElement();
+            if (ks.isKeyEntry(currentAlias)) {
+                alias = currentAlias;
+                break;
+            }
+        }
+        
+        if (alias == null) {
+            throw new KeyStoreException("Nenhuma chave privada encontrada no arquivo do certificado.");
+        }
+
         KeyStore.PrivateKeyEntry keyEntry = (KeyStore.PrivateKeyEntry) ks.getEntry(
                 alias, new KeyStore.PasswordProtection(senhaCertificado.toCharArray()));
 
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
         dbf.setNamespaceAware(true);
-        Document doc = dbf.newDocumentBuilder().parse(new ByteArrayInputStream(xmlConteudo.getBytes("UTF-8")));
+        Document doc = dbf.newDocumentBuilder().parse(new ByteArrayInputStream(xmlConteudo.getBytes(StandardCharsets.UTF_8)));
 
         Document docAssinado = signNode(doc, keyEntry, nomeNoParaAssinar, nomeAtributoId, namespace);
 
         Transformer transformer = TransformerFactory.newInstance().newTransformer();
-        transformer.setOutputProperty(javax.xml.transform.OutputKeys.INDENT, "no");
-        transformer.setOutputProperty(javax.xml.transform.OutputKeys.OMIT_XML_DECLARATION, "no");
-        transformer.setOutputProperty(javax.xml.transform.OutputKeys.ENCODING, "UTF-8");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+        transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
 
         StringWriter writer = new StringWriter();
         transformer.transform(new DOMSource(docAssinado), new StreamResult(writer));
 
         String xmlFinal = writer.toString();
 
-        return xmlFinal.replaceAll("\r", "")
-                       .replaceAll("\n", "")
-                       .replaceAll("&#13;", "")
-                       .replace(" standalone=\"no\"", "");
+        // return xmlFinal.replaceAll("\r", "")
+        //                .replaceAll("\n", "")
+        //                .replaceAll("&#13;", "")
+        //                .replace(" standalone=\"no\"", "");
+        // Testes OK, e docs assinados aprovados no "https://validar.iti.gov.br/" com sucesso!
+        return xmlFinal;
     }
 
     private Document signNode(Document doc, KeyStore.PrivateKeyEntry keyEntry, String targetNode, String nomeAtributoId, String namespace) throws Exception {
@@ -68,13 +99,13 @@ public class AssinadorXml {
         // 1. Localiza o elemento que será assinado (ex: infNFSe)
         NodeList elements = doc.getElementsByTagName(targetNode);
         if (elements.getLength() == 0) {elements = doc.getElementsByTagNameNS("*", targetNode);}
-        if (elements.getLength() == 0) throw new Exception("Tag <" + targetNode + "> não encontrada.");
+        if (elements.getLength() == 0) throw new IllegalArgumentException("Tag <" + targetNode + "> não encontrada no XML.");
         
         Element elementToSign = (Element) elements.item(0); 
 
         String id = elementToSign.getAttribute(nomeAtributoId);
         if (id == null || id.isEmpty()) {
-            throw new Exception("O atributo '" + nomeAtributoId + "' na tag <" + targetNode + "> está vazio ou ausente.");
+            throw new IllegalArgumentException("O atributo '" + nomeAtributoId + "' na tag <" + targetNode + "> está vazio ou ausente.");
         }
         
         elementToSign.setIdAttribute(nomeAtributoId, true); 

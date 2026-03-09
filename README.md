@@ -20,3 +20,7 @@ Esta biblioteca foi projetada para facilitar a integração de assinatura digita
 ## ⚙️ Como Usar e Testar
 
 Para um guia detalhado sobre como compilar, rodar os testes e integrar a biblioteca em seu projeto, consulte o nosso **[Guia de Desenvolvimento e Uso (Passo a Passo)](.github/guide.md)**.
+
+## 🤝 Contribuições e Melhorias Futuras
+
+Sugestões de melhorias e relatos de bugs são bem-vindos! Por favor, abra uma **[Issue](https://github.com/heviane/assinador-xml-java/issues)** para discutir o que você gostaria de mudar.

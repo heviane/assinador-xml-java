@@ -40,7 +40,8 @@ import org.w3c.dom.NodeList;
 public class AssinadorXml {
 
     public String assinarXml(String xmlConteudo, String caminhoCertificado, String senhaCertificado, 
-                             String nomeNoParaAssinar, String nomeAtributoId, String namespace) throws Exception { // A assinatura pode lançar diversas exceções
+                             String nomeNoParaAssinar, String nomeAtributoId, String namespace,
+                             String algoritmoCanonicalizacao) throws Exception { 
         
         File file = new File(caminhoCertificado);
 		if (!file.exists()) {
@@ -74,7 +75,7 @@ public class AssinadorXml {
         dbf.setNamespaceAware(true);
         Document doc = dbf.newDocumentBuilder().parse(new ByteArrayInputStream(xmlConteudo.getBytes(StandardCharsets.UTF_8)));
 
-        Document docAssinado = signNode(doc, keyEntry, nomeNoParaAssinar, nomeAtributoId, namespace);
+        Document docAssinado = signNode(doc, keyEntry, nomeNoParaAssinar, nomeAtributoId, namespace, algoritmoCanonicalizacao);
 
         Transformer transformer = TransformerFactory.newInstance().newTransformer();
         transformer.setOutputProperty(OutputKeys.INDENT, "no");
@@ -86,59 +87,66 @@ public class AssinadorXml {
 
         String xmlFinal = writer.toString();
 
-        // return xmlFinal.replaceAll("\r", "")
-        //                .replaceAll("\n", "")
-        //                .replaceAll("&#13;", "")
-        //                .replace(" standalone=\"no\"", "");
-        // Testes OK, e docs assinados aprovados no "https://validar.iti.gov.br/" com sucesso!
-        return xmlFinal;
+        // Replace necessário para SIL Tecnologia (Vila Velha ES)
+        return xmlFinal.replaceAll("\r", "")
+                       .replaceAll("\n", "")
+                       .replaceAll("&#13;", "")
+                       .replace(" standalone=\"no\"", "");
     }
 
-    private Document signNode(Document doc, KeyStore.PrivateKeyEntry keyEntry, String targetNode, String nomeAtributoId, String namespace) throws Exception {
+    private Document signNode(Document doc, KeyStore.PrivateKeyEntry keyEntry, String targetNode, String nomeAtributoId, String namespace, String algoritmoCanonicalizacao) throws Exception {
         
-        // 1. Localiza o elemento que será assinado (ex: infNFSe)
+        // 1. Localiza o elemento onde a assinatura será inserida (ex: infNFSe)
         NodeList elements = doc.getElementsByTagName(targetNode);
         if (elements.getLength() == 0) {elements = doc.getElementsByTagNameNS("*", targetNode);}
-        if (elements.getLength() == 0) throw new IllegalArgumentException("Tag <" + targetNode + "> não encontrada no XML.");
+        if (elements.getLength() == 0) throw new IllegalArgumentException("Tag <" + targetNode + "> não encontrada no XML para inserir a assinatura.");
         
-        Element elementToSign = (Element) elements.item(0); 
+        Element signatureParent = (Element) elements.item(0); 
 
-        String id = elementToSign.getAttribute(nomeAtributoId);
-        if (id == null || id.isEmpty()) {
-            throw new IllegalArgumentException("O atributo '" + nomeAtributoId + "' na tag <" + targetNode + "> está vazio ou ausente.");
-        }
-        
-        elementToSign.setIdAttribute(nomeAtributoId, true); 
-        elementToSign.setIdAttributeNS(null, nomeAtributoId, true); // Garante reconhecimento em diferentes parsers
-
-        // Opcional: Alguns servidores SIL antigos só validam se o ID for setado via Attr
-        Attr idAttr = elementToSign.getAttributeNode(nomeAtributoId);
-        elementToSign.setIdAttributeNode(idAttr, true);
-
-        // 3. Contexto de Assinatura (DENTRO do elemento para ser Enveloped)
-        DOMSignContext dsc = new DOMSignContext(keyEntry.getPrivateKey(), elementToSign);
+        // 2. Define o URI de referência e prepara o contexto da assinatura
+        String referenceURI;
+        DOMSignContext dsc = new DOMSignContext(keyEntry.getPrivateKey(), signatureParent);
         dsc.putNamespacePrefix(XMLSignature.XMLNS, "");
-        dsc.setIdAttributeNS(elementToSign, null, nomeAtributoId);
         if (namespace != null && !namespace.isEmpty()) {
             dsc.putNamespacePrefix(namespace, "");// Ajuda o validador do servidor a encontrar o nó dentro do namespace correto
+        }
+
+        // Se um atributo de ID foi especificado, a referência será a esse elemento.
+        // Caso contrário, a referência é ao documento inteiro (URI="").
+        if (nomeAtributoId != null && !nomeAtributoId.isEmpty()) {
+            Element elementToSign = signatureParent;
+
+            // Se o atributo de ID não existir no nó, cria um dinamicamente.
+            if (!elementToSign.hasAttribute(nomeAtributoId)) {
+                String idGerado = "id-" + java.util.UUID.randomUUID().toString();
+                elementToSign.setAttribute(nomeAtributoId, idGerado);
+            }
+            
+            elementToSign.setIdAttribute(nomeAtributoId, true); 
+            elementToSign.setIdAttributeNS(null, nomeAtributoId, true);
+            Attr idAttr = elementToSign.getAttributeNode(nomeAtributoId);
+            elementToSign.setIdAttributeNode(idAttr, true);
+            dsc.setIdAttributeNS(elementToSign, null, nomeAtributoId);
+            referenceURI = "#" + elementToSign.getAttribute(nomeAtributoId);
+        } else {
+            referenceURI = ""; // Assina o documento inteiro (enveloped)
         }
 
         XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
 
         // 4. Transformações (Mantendo o Enveloped e Exclusive C14N)        
         Transform enveloped = fac.newTransform(Transform.ENVELOPED, (TransformParameterSpec) null);
-        Transform c14nExc = fac.newTransform(CanonicalizationMethod.EXCLUSIVE, (TransformParameterSpec) null);
-        List<Transform> transformList = List.of(enveloped, c14nExc);
+        List<Transform> transformList = List.of(enveloped);
 
         // 5. Referência 
         Reference ref = fac.newReference(
-            "#" + elementToSign.getAttribute(nomeAtributoId), 
+            referenceURI, 
             fac.newDigestMethod(DigestMethod.SHA1, null), // Constante: http://www.w3.org/2000/09/xmldsig#sha1
             transformList, null, null
         );
         
         SignedInfo si = fac.newSignedInfo(
-            fac.newCanonicalizationMethod(CanonicalizationMethod.EXCLUSIVE, (C14NMethodParameterSpec) null),
+            fac.newCanonicalizationMethod(algoritmoCanonicalizacao, (C14NMethodParameterSpec) null),
             fac.newSignatureMethod(SignatureMethod.RSA_SHA1, null), // Constante: http://www.w3.org/2000/09/xmldsig#rsa-sha1
             Collections.singletonList(ref)
         );

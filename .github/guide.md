@@ -66,9 +66,9 @@ Para usar esta biblioteca em sua aplicação Java:
 
 ```xml
 <dependency>
-    <groupId>com.assinadorxml</groupId>
+    <groupId>com.assinador</groupId>
     <artifactId>assinador</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 

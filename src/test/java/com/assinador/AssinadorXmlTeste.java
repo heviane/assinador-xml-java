@@ -2,6 +2,8 @@ package com.assinador;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
+
+import javax.xml.crypto.dsig.CanonicalizationMethod;
 import java.nio.charset.StandardCharsets;
 
 public class AssinadorXmlTeste {
@@ -21,7 +23,7 @@ public class AssinadorXmlTeste {
             System.out.println("=== Iniciando Testes de Integração ===");
 
             // -------------------------------------------------------------------
-            // CENÁRIO 1: EMISSÃO (Id="Id", Namespace=".../nfse")
+            // CENÁRIO 1: EMISSÃO
             // -------------------------------------------------------------------
             String arqEmissao = "dps-original.xml";
             if (Files.exists(Paths.get(arqEmissao))) {
@@ -32,9 +34,10 @@ public class AssinadorXmlTeste {
                     xmlOriginal, 
                     caminhoCertificado, 
                     senhaCertificado,
-                    "infNFSe",                     // Nó alvo
-                    "Id",                             // Atributo ID (Maiúsculo)
-                    "http://www.sped.fazenda.gov.br/nfse"  // Namespace
+                    "infNFSe",                      // Nó alvo
+                    "Id",                              // Atributo ID (Maiúsculo)
+                    "http://www.sped.fazenda.gov.br/nfse",  // Namespace
+                    CanonicalizationMethod.EXCLUSIVE                  // Algoritmo padrão
                 );
 
                 Files.write(Paths.get("dps-assinado.xml"), xmlAssinado.getBytes(StandardCharsets.UTF_8));
@@ -44,7 +47,7 @@ public class AssinadorXmlTeste {
             }
 
             // -------------------------------------------------------------------
-            // CENÁRIO 2: CANCELAMENTO (Id="id", Namespace=".../nfsevia")
+            // CENÁRIO 2: CANCELAMENTO 
             // -------------------------------------------------------------------
             String arqCancelamento = "cancelamento-original.xml";
             if (Files.exists(Paths.get(arqCancelamento))) {
@@ -55,15 +58,40 @@ public class AssinadorXmlTeste {
                     xmlOriginal, 
                     caminhoCertificado, 
                     senhaCertificado,
-                    "infEventoVia",                  // Nó alvo (Ajustar conforme XML)
-                    "id",                               // Atributo ID (Minúsculo)
-                    "http://www.sped.fazenda.gov.br/nfsevia" // Namespace
+                    "infEventoVia",                // Nó alvo (Ajustar conforme XML)
+                    "id",                             // Atributo ID (Minúsculo)
+                    "http://www.sped.fazenda.gov.br/nfse", // Namespace
+                    CanonicalizationMethod.EXCLUSIVE                 // Algoritmo padrão
                 );
 
                 Files.write(Paths.get("cancelamento-assinado.xml"), xmlAssinado.getBytes(StandardCharsets.UTF_8));
                 System.out.println("✅ Cancelamento gerado: cancelamento-assinado.xml");
             } else {
                 System.out.println("⚠️ Arquivo de cancelamento (" + arqCancelamento + ") não encontrado. Crie este arquivo para testar.");
+            }
+
+            // -------------------------------------------------------------------
+            // CENÁRIO 3: CONSULTA (Sem ID prévio e sem Namespace)
+            // -------------------------------------------------------------------
+            String arqConsulta = "consulta-original.xml";
+            if (Files.exists(Paths.get(arqConsulta))) {
+                System.out.println("\n>>> Testando Consulta (sem ID/Namespace)...");
+                String xmlOriginal = new String(Files.readAllBytes(Paths.get(arqConsulta)), StandardCharsets.UTF_8);
+                
+                String xmlAssinado = assinador.assinarXml(
+                    xmlOriginal, 
+                    caminhoCertificado, 
+                    senhaCertificado,
+                    "ConsultarNFE", // Nó alvo
+                    null,           // Sem atributo de ID, para gerar URI=""
+                    null,           // Sem namespace
+                    CanonicalizationMethod.INCLUSIVE // Canonicalização Inclusiva (exigência SIL)
+                );
+
+                Files.write(Paths.get("consulta-assinado.xml"), xmlAssinado.getBytes(StandardCharsets.UTF_8));
+                System.out.println("✅ Consulta gerada: consulta-assinado.xml");
+            } else {
+                System.out.println("⚠️ Arquivo de consulta (" + arqConsulta + ") não encontrado. Crie este arquivo para testar.");
             }
 
         } catch (Exception e) {
